@@ -13,7 +13,5 @@ coverage/
 .DS_Store
 *.swp
 
-# Pi agent runtime data; keep the generated Spec Kit prompts tracked
-.pi/*
-!.pi/prompts/
-!.pi/prompts/**
+# Pi agent runtime data
+.pi/

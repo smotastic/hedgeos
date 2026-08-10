@@ -1,6 +1,6 @@
 # HedgeOS v1 Project Brief
 
-**Status:** Accepted from Wayfinder session  
+**Status:** Existing scope context; revalidate through the new Wayfinder map
 **Date:** 2026-08-07
 
 ## Product vision
@@ -9,7 +9,7 @@ HedgeOS is a local-first smart-home platform for Raspberry Pi installations. It 
 
 The first customer is the project owner. The platform is designed so that future customers could use it, but multi-customer and cloud concerns are not part of v1.
 
-The development process is AI-first and follows the Spec Kit workflow. AI-first describes the development method; it is not a v1 runtime feature.
+The development process is AI-first and uses Wayfinder for multi-session discovery. AI-first describes the development method; it is not a v1 runtime feature.
 
 ## First-release scope
 
