@@ -1,0 +1,1 @@
+{"name":"@hedgeos/application","version":"0.0.0","type":"module","exports":"./dist/index.js","scripts":{"build":"tsc -p tsconfig.json"},"dependencies":{"@hedgeos/domain":"workspace:*","@hedgeos/ports":"workspace:*"}}
