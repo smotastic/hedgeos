@@ -5,7 +5,7 @@ Research for [Select HedgeOS v1 TypeScript implementation stack and toolchain](h
 ## Recommendation
 
 - **Runtime/deployment:** Node.js 24 LTS (Krypton), TypeScript compiled to JavaScript, and the official `node:24-bookworm-slim` image. Pin the Node image by digest in release deployment; build/test on amd64 and arm64. Node's release index identifies 24.x as LTS, and the official Node image publishes ARM64 variants through Docker Hub's multi-platform image metadata.
-- **Workspace/build:** pnpm workspaces, with a small `apps/` and `libs/` monorepo. Use TypeScript project references and `tsc` for compilation; use package `exports` to make boundaries explicit. Do not add a general-purpose task/build orchestrator for v1. Each deployable app has its own image and composition root.
+- **Workspace/build:** Nx monorepo using pnpm as the package manager, with a small `apps/` and `libs/` layout. Use Nx's project graph, task targets, caching, and generators while retaining TypeScript project references and `tsc` for compilation; use package `exports` to make boundaries explicit. Each deployable app has its own image and composition root.
 - **Persistence/migrations:** `pg` for PostgreSQL connections and parameterized SQL through repository ports; `node-pg-migrate` for versioned SQL migrations. Keep SQL/adapters in infrastructure packages and keep domain/application packages free of `pg` types. Do not introduce an ORM in v1.
 - **CLI:** Commander. CLI commands invoke application use cases; they do not access repositories or vendor clients directly.
 - **MQTT:** `mqtt` as the generic MQTT transport adapter. Shelly/BTHome topic and payload decoding remains in the Shelly integration package.
@@ -24,7 +24,7 @@ Research for [Select HedgeOS v1 TypeScript implementation stack and toolchain](h
 - **Node 22 LTS:** compatible and already common on Raspberry Pi, but Node 24 is the current LTS line and gives a longer support runway for a new v1 build. Keep the runtime version configurable if the deployment image must remain on 22 during rollout.
 - **Drizzle/Prisma:** useful higher-level query APIs, but unnecessary for a small schema and would increase coupling between persistence modeling and application code. `pg` plus SQL keeps ownership and query behavior explicit.
 - **tsx/ts-node in production:** convenient during development, but compiling with `tsc` gives smaller, deterministic production images and catches package-boundary errors before deployment.
-- **Turborepo/Nx:** potentially useful at larger scale, but adds orchestration complexity before the repository has enough packages to need it.
+- **Turborepo:** not selected; Nx provides the desired project graph, task orchestration, caching, and generators in one tool. Plain pnpm workspaces remain the underlying package-manager mechanism, not the monorepo orchestrator.
 - **Telegraf:** a lower-level Telegram API client is possible; `grammy` provides a maintained typed Telegram Bot API surface while still fitting behind one adapter.
 
 ## Primary sources
@@ -33,6 +33,7 @@ Research for [Select HedgeOS v1 TypeScript implementation stack and toolchain](h
 - Official Node Docker image tags and architecture metadata: https://hub.docker.com/_/node and https://hub.docker.com/v2/repositories/library/node/tags/24-bookworm-slim
 - TypeScript project references: https://www.typescriptlang.org/docs/handbook/project-references.html
 - pnpm workspaces: https://pnpm.io/workspaces
+- Nx integrated monorepos and task running: https://nx.dev/concepts/decisions/why-monorepos and https://nx.dev/features/cache-task-results
 - node-postgres documentation: https://node-postgres.com/
 - node-pg-migrate documentation: https://salsita.github.io/node-pg-migrate/
 - Commander documentation: https://github.com/tj/commander.js
@@ -43,4 +44,4 @@ Research for [Select HedgeOS v1 TypeScript implementation stack and toolchain](h
 - Vitest documentation: https://vitest.dev/
 - Docker multi-platform builds: https://docs.docker.com/build/building/multi-platform/
 
-The package-version compatibility check used npm's first-party registry metadata on 2026-08-11: `pg` requires Node >=16, `mqtt` >=16, `grammy` supports Node >=14.13.1, `node-pg-migrate` >=20.11, `vitest` supports Node 20/22/24, and Commander 15 requires Node >=22.12. Node 24 therefore satisfies the selected tools on ARM64; native addon use should be avoided unless an ARM64 build is verified.
+The package-version compatibility check used npm's first-party registry metadata on 2026-08-11: `pg` requires Node >=16, `mqtt` >=16, `grammy` supports Node >=14.13.1, `node-pg-migrate` >=20.11, `vitest` supports Node 20/22/24, and Commander 15 requires Node >=22.12. Node 24 therefore satisfies the selected tools on ARM64; native addon use should be avoided unless an ARM64 build is verified. Nx's official documentation covers integrated monorepos, project graphs, task running, caching, and generators; its native optional packages must be included for the target ARM64 platform and verified in the Docker build.
