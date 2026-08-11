@@ -1,0 +1,7 @@
+{
+  "compilerOptions": {
+    "target":"ES2022", "module":"NodeNext", "moduleResolution":"NodeNext", "strict":true,
+    "esModuleInterop":true, "skipLibCheck":true, "declaration":true, "composite":true,
+    "types":["node"], "baseUrl":".", "paths":{"@hedgeos/domain":["libs/domain/src/index.ts"],"@hedgeos/ports":["libs/ports/src/index.ts"],"@hedgeos/application":["libs/application/src/index.ts"],"@hedgeos/infrastructure":["libs/infrastructure/src/index.ts"]}
+  }
+}
