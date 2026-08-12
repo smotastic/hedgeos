@@ -55,6 +55,74 @@ export interface RegisteredDevice {
   readonly updatedAt: Date;
 }
 
+export interface StateTransitionPredicate {
+  readonly capability: DeviceCapability;
+  readonly deviceAddress?: string;
+  readonly previousState?: Exclude<ContactState, 'unknown'>;
+  readonly currentState: Exclude<ContactState, 'unknown'>;
+}
+
+export interface AutomationRevision {
+  readonly id: string;
+  readonly automationId: string;
+  readonly revision: number;
+  readonly predicate: StateTransitionPredicate;
+  readonly createdAt: Date;
+}
+
+export interface Automation {
+  readonly id: string;
+  readonly name: string;
+  readonly enabled: boolean;
+  readonly currentRevision: number;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+}
+
+export type ExecutionMode = 'live' | 'replay';
+export type AutomationExecutionStatus = 'recorded' | 'failed';
+export type LogicalActionStatus = 'pending' | 'sending' | 'delivered' | 'suppressed' | 'failed';
+
+export interface AutomationExecution {
+  readonly id: string;
+  readonly transitionId: string;
+  readonly automationId: string;
+  readonly automationRevisionId: string;
+  readonly mode: ExecutionMode;
+  readonly status: AutomationExecutionStatus;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+}
+
+export interface LogicalNotificationAction {
+  readonly id: string;
+  readonly executionId: string;
+  readonly type: 'telegram_notification';
+  readonly status: LogicalActionStatus;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+  readonly failureReason?: string;
+}
+
+export function matchesStateTransition(
+  predicate: StateTransitionPredicate,
+  transition: Pick<StateTransition, 'deviceAddress' | 'capability' | 'previousState' | 'currentState'>,
+): boolean {
+  return predicate.capability === transition.capability
+    && (!predicate.deviceAddress || predicate.deviceAddress === transition.deviceAddress)
+    && (!predicate.previousState || predicate.previousState === transition.previousState)
+    && predicate.currentState === transition.currentState;
+}
+
+export function validateStateTransitionPredicate(predicate: StateTransitionPredicate): StateTransitionPredicate {
+  if (predicate.capability !== 'contact') throw new Error('Only contact automations are supported');
+  if (predicate.deviceAddress) predicate = { ...predicate, deviceAddress: normalizeBleAddress(predicate.deviceAddress) };
+  const candidate = predicate as { currentState: string; previousState?: string };
+  if (candidate.currentState !== 'open' && candidate.currentState !== 'closed') throw new Error('Current state must be open or closed');
+  if (candidate.previousState !== undefined && candidate.previousState !== 'open' && candidate.previousState !== 'closed') throw new Error('Previous state must be open or closed');
+  return { ...predicate };
+}
+
 export function applyObservation(input: {
   currentState: ContactState;
   currentOccurredAt?: Date | null;

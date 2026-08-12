@@ -11,6 +11,40 @@ export class PostgresIngestionRepositories implements IngestionRepositories {
     this.devices = { findByAddress: address => deviceRepository.findByAddress(address) };
   }
 
+  readonly ingestion = {
+    commit: async (raw: RawTransportMessage, observation: NormalizedObservation | null, transitionId?: string) => {
+      const client = await this.pool.connect();
+      try {
+        await client.query('BEGIN');
+        const inserted = (await client.query(
+          `INSERT INTO raw_transport_messages
+           (id, topic, payload, payload_bytes, gateway_identity, received_at, correlation_id, delivery_key, quarantine_reason)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (delivery_key) DO NOTHING`,
+          [raw.id, raw.topic, raw.payload, Buffer.from(raw.payloadBytes), raw.gatewayIdentity, raw.receivedAt, raw.correlationId, raw.deliveryKey, raw.quarantineReason],
+        )).rowCount === 1;
+        if (!inserted || !observation || !transitionId) { await client.query('COMMIT'); return { inserted, accepted: false, observation: null, transition: null }; }
+        await client.query(
+          `INSERT INTO observations (id, raw_message_id, device_address, capability, state, occurred_at, received_at, sequence)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO NOTHING`,
+          [observation.id, observation.rawMessageId, observation.deviceAddress, observation.capability, observation.state, observation.occurredAt, observation.receivedAt, observation.sequence],
+        );
+        const current = await client.query<{ state: ContactState; last_observation_occurred_at: Date | null }>(
+          'SELECT state, last_observation_occurred_at FROM devices WHERE address=$1 FOR UPDATE', [observation.deviceAddress],
+        );
+        const result = applyObservation({ currentState: current.rows[0]?.state ?? 'unknown', currentOccurredAt: current.rows[0]?.last_observation_occurred_at, observation, transitionId });
+        if (result.accepted) {
+          await client.query('UPDATE devices SET state=$2,last_observation_sequence=$3,last_observation_occurred_at=$5,updated_at=$4 WHERE address=$1', [observation.deviceAddress,result.state,observation.sequence,observation.receivedAt,observation.occurredAt]);
+            if (result.transition) {
+            await client.query('INSERT INTO state_transitions (id,observation_id,device_address,capability,previous_state,current_state,occurred_at,sequence) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO NOTHING', [result.transition.id,result.transition.observationId,result.transition.deviceAddress,result.transition.capability,result.transition.previousState,result.transition.currentState,result.transition.occurredAt,result.transition.sequence]);
+            await client.query('INSERT INTO transition_handoff (transition_id,available_at) VALUES ($1,$2) ON CONFLICT (transition_id) DO NOTHING', [result.transition.id, result.transition.occurredAt]);
+          }
+        }
+        await client.query('COMMIT');
+        return { inserted, accepted: result.accepted, observation, transition: result.transition };
+      } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
+    },
+  };
+
   readonly raw = {
     save: async (message: RawTransportMessage) => {
       await this.pool.query(
