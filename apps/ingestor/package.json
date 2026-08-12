@@ -1,1 +1,1 @@
-{"name":"@hedgeos/ingestor","version":"0.0.0","type":"module","scripts":{"build":"tsc -p tsconfig.json"}}
+{"name":"@hedgeos/ingestor","version":"0.0.0","type":"module","scripts":{"build":"tsc -p tsconfig.json"},"dependencies":{"@hedgeos/application":"workspace:*","@hedgeos/infrastructure":"workspace:*","pg":"^8.23.0"}}

@@ -1,0 +1,60 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: hedgeos
+      POSTGRES_USER: hedgeos
+      POSTGRES_PASSWORD: hedgeos-dev-only
+    volumes:
+      - hedgeos-postgres:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hedgeos -d hedgeos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    volumes:
+      - ./infra/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    ports:
+      - "${MQTT_HOST_PORT:-1883}:1883"
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -t '$$SYS/broker/uptime' -C 1 -W 3 >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ingestor:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile
+    command: ["node", "apps/ingestor/dist/main.js"]
+    environment:
+      DATABASE_URL: postgresql://hedgeos:hedgeos-dev-only@postgres:5432/hedgeos
+      MQTT_URL: mqtt://mosquitto:1883
+      MQTT_TOPIC: ${MQTT_TOPIC:-+/events/rpc}
+      SHELLY_GATEWAY_MAPPINGS: ${SHELLY_GATEWAY_MAPPINGS:-[]}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+    restart: unless-stopped
+
+  runner:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile
+    command: ["node", "apps/runner/dist/main.js"]
+    environment:
+      DATABASE_URL: postgresql://hedgeos:hedgeos-dev-only@postgres:5432/hedgeos
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  hedgeos-postgres:

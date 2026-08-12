@@ -1,0 +1,27 @@
+{
+  "mqttTopic": "shellyblugwg3-b08184a4a9bc/events/rpc",
+  "gatewayIdentity": "shellyblugwg3-b08184a4a9bc",
+  "receivedAt": "2026-02-16T17:15:47.256590Z",
+  "payload": {
+    "src": "shellyblugwg3-b08184a4a9bc",
+    "dst": "shellyblugwg3-b08184a4a9bc/events",
+    "method": "NotifyStatus",
+    "params": {
+      "ts": 1769963293.36,
+      "bthomesensor:205": {
+        "last_updated_ts": 1769963293,
+        "value": false
+      }
+    }
+  },
+  "source": {
+    "database": "supabase-db",
+    "table": "public.device_events_bronze",
+    "eventId": "9aad96d5-a6eb-45d5-9d9d-a4d8cdbe31ca"
+  },
+  "notes": [
+    "The gateway RPC envelope identifies the paired BTHome sensor by gateway component key (bthomesensor:205), not by BLE address.",
+    "The same capture window contained direct BLE advertisements on topic 7c:c6:b6:7f:52:df with service_data.window values 0 and 1.",
+    "A configured component-to-BLE identity mapping is therefore required before gateway component notifications can become canonical observations."
+  ]
+}
