@@ -1,6 +1,7 @@
 export * from './ingestion.js';
 export * from './mqtt.js';
 export * from './migrations.js';
+export * from './automation.js';
 
 import type { Pool } from 'pg';
 import { normalizeBleAddress, type DeviceStatus, type RegisteredDevice, type ContactState } from '@hedgeos/domain';

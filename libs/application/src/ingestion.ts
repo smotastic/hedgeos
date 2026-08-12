@@ -40,16 +40,19 @@ export class IngestionService {
     const decoded = decodeShellyContact(message.topic, payload, this.mappings);
     if (!decoded) {
       raw.quarantineReason = quarantineReason(message.topic, payload, this.mappings);
-      if (this.repositories.raw.saveIfNew) await this.repositories.raw.saveIfNew(raw);
+      if (this.repositories.ingestion) await this.repositories.ingestion.commit(raw, null);
+      else if (this.repositories.raw.saveIfNew) await this.repositories.raw.saveIfNew(raw);
       else await this.repositories.raw.save(raw);
       return { raw, observation: null };
     }
     const device = await this.repositories.devices.findByAddress(decoded.deviceAddress);
     if (!device || device.status !== 'enabled') raw.quarantineReason = device ? 'disabled_device' : 'unknown_device';
-    if (this.repositories.raw.saveIfNew) {
-      if (!await this.repositories.raw.saveIfNew(raw)) return { raw, observation: null };
-    } else await this.repositories.raw.save(raw);
-    if (!device || device.status !== 'enabled') return { raw, observation: null };
+    if (!device || device.status !== 'enabled') {
+      if (this.repositories.ingestion) await this.repositories.ingestion.commit(raw, null);
+      else if (this.repositories.raw.saveIfNew) await this.repositories.raw.saveIfNew(raw);
+      else await this.repositories.raw.save(raw);
+      return { raw, observation: null };
+    }
     const observation: NormalizedObservation = {
       id: this.ids.next(), rawMessageId: raw.id, deviceAddress: decoded.deviceAddress,
       capability: 'contact', state: decoded.state,
@@ -57,8 +60,15 @@ export class IngestionService {
       sequence: await this.repositories.observations.nextSequence(decoded.deviceAddress),
     };
     const transitionId = this.ids.next();
+    if (this.repositories.ingestion) {
+      await this.repositories.ingestion.commit(raw, observation, transitionId);
+      return { raw, observation };
+    }
+    if (this.repositories.raw.saveIfNew) {
+      if (!await this.repositories.raw.saveIfNew(raw)) return { raw, observation: null };
+    } else await this.repositories.raw.save(raw);
     if (this.repositories.observations.commitObservation) {
-      const result = await this.repositories.observations.commitObservation(observation, transitionId);
+      await this.repositories.observations.commitObservation(observation, transitionId);
       return { raw, observation };
     }
     await this.repositories.observations.save(observation);
