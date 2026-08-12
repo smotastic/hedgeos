@@ -1,10 +1,10 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16.4-alpine
     environment:
       POSTGRES_DB: hedgeos
       POSTGRES_USER: hedgeos
-      POSTGRES_PASSWORD: hedgeos-dev-only
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in deployment environment}
     volumes:
       - hedgeos-postgres:/var/lib/postgresql/data
     ports:
@@ -13,10 +13,11 @@ services:
       test: ["CMD-SHELL", "pg_isready -U hedgeos -d hedgeos"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 12
+      start_period: 5s
 
   mosquitto:
-    image: eclipse-mosquitto:2
+    image: eclipse-mosquitto:2.0.21
     volumes:
       - ./infra/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
     ports:
@@ -25,7 +26,19 @@ services:
       test: ["CMD-SHELL", "mosquitto_sub -h localhost -t '$$SYS/broker/uptime' -C 1 -W 3 >/dev/null"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 12
+
+  migrate:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile
+    command: ["node", "apps/migrate/dist/main.js"]
+    environment:
+      DATABASE_URL: postgresql://hedgeos:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in deployment environment}@postgres:5432/hedgeos
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
 
   ingestor:
     build:
@@ -33,15 +46,21 @@ services:
       dockerfile: infra/Dockerfile
     command: ["node", "apps/ingestor/dist/main.js"]
     environment:
-      DATABASE_URL: postgresql://hedgeos:hedgeos-dev-only@postgres:5432/hedgeos
+      DATABASE_URL: postgresql://hedgeos:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in deployment environment}@postgres:5432/hedgeos
       MQTT_URL: mqtt://mosquitto:1883
       MQTT_TOPIC: ${MQTT_TOPIC:-+/events/rpc}
       SHELLY_GATEWAY_MAPPINGS: ${SHELLY_GATEWAY_MAPPINGS:-[]}
+      INGESTOR_READY_FILE: /tmp/hedgeos-ingestor-ready
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       mosquitto:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "process.exit(require('node:fs').existsSync('/tmp/hedgeos-ingestor-ready') ? 0 : 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
     restart: unless-stopped
 
   runner:
@@ -50,10 +69,17 @@ services:
       dockerfile: infra/Dockerfile
     command: ["node", "apps/runner/dist/main.js"]
     environment:
-      DATABASE_URL: postgresql://hedgeos:hedgeos-dev-only@postgres:5432/hedgeos
+      DATABASE_URL: postgresql://hedgeos:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in deployment environment}@postgres:5432/hedgeos
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "import('pg').then(async ({Pool})=>{const p=new Pool({connectionString:process.env.DATABASE_URL}); await p.query('SELECT 1'); await p.end()}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 6
     restart: unless-stopped
 
 volumes:

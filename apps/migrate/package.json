@@ -1,0 +1,1 @@
+{"name":"@hedgeos/migrate","version":"0.0.0","type":"module","scripts":{"build":"tsc -p tsconfig.json"},"dependencies":{"@hedgeos/infrastructure":"workspace:*","pg":"^8.23.0"}}
