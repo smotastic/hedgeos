@@ -1,3 +1,5 @@
+export * from './ingestion.js';
+
 import { randomUUID } from 'node:crypto';
 import { normalizeBleAddress, registerDevice, type DeviceStatus, type RegisteredDevice } from '@hedgeos/domain';
 import type { Clock, DeviceRepository, DeviceUseCases, IdGenerator } from '@hedgeos/ports';

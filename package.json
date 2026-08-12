@@ -21,6 +21,7 @@
   "dependencies": {
     "@types/pg": "^8.21.0",
     "commander": "^15.0.0",
+    "mqtt": "^5.15.2",
     "pg": "^8.23.0"
   }
 }
