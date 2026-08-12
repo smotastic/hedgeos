@@ -132,6 +132,21 @@ export interface NotificationAttempt {
   readonly failureReason?: string;
 }
 
+export interface NotificationContext {
+  readonly deviceName: string;
+}
+
+export class NotificationDeliveryError extends Error {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+    readonly statusCode?: number,
+  ) {
+    super(message);
+    this.name = 'NotificationDeliveryError';
+  }
+}
+
 export interface NotificationActionPort {
-  send(action: LogicalNotificationAction, transition: StateTransition): Promise<void>;
+  send(action: LogicalNotificationAction, transition: StateTransition, context?: NotificationContext): Promise<void>;
 }

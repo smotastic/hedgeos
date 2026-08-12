@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { AutomationRunner, RandomIdGenerator, SystemClock } from '@hedgeos/application';
-import { PostgresAutomationExecutionRepository, PostgresAutomationRepository, PostgresDeviceRepository, PostgresTransitionHandoff, runMigrations } from '@hedgeos/infrastructure';
+import { PostgresAutomationExecutionRepository, PostgresAutomationRepository, PostgresDeviceRepository, PostgresTransitionHandoff, runMigrations, telegramFromEnvironment } from '@hedgeos/infrastructure';
 
 export function createRunner() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -9,7 +9,7 @@ export function createRunner() {
   const runner = new AutomationRunner(
     new PostgresTransitionHandoff(pool), automations,
     new PostgresAutomationExecutionRepository(pool), new PostgresDeviceRepository(pool),
-    new RandomIdGenerator(), new SystemClock(),
+    new RandomIdGenerator(), new SystemClock(), telegramFromEnvironment(),
   );
   return { name: 'runner' as const, pool, runner };
 }
