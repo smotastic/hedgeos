@@ -2,6 +2,6 @@
   "files": [],
   "references": [
     {"path":"libs/domain"}, {"path":"libs/ports"}, {"path":"libs/application"},
-    {"path":"libs/infrastructure"}, {"path":"apps/cli"}, {"path":"apps/ingestor"}, {"path":"apps/runner"}
+    {"path":"libs/infrastructure"}, {"path":"apps/cli"}, {"path":"apps/ingestor"}, {"path":"apps/runner"}, {"path":"apps/migrate"}
   ]
 }

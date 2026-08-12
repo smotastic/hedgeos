@@ -61,6 +61,15 @@ importers:
         specifier: ^8.23.0
         version: 8.23.0
 
+  apps/migrate:
+    dependencies:
+      '@hedgeos/infrastructure':
+        specifier: workspace:*
+        version: link:../../libs/infrastructure
+      pg:
+        specifier: ^8.23.0
+        version: 8.23.0
+
   apps/runner: {}
 
   libs/application:

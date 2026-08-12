@@ -1,10 +1,19 @@
 # Infrastructure
 
-The default deployment is Docker Compose:
+The default deployment is Docker Compose. Supply secrets from a deployment environment (never commit them):
 
 ```sh
+export POSTGRES_PASSWORD='a-long-random-password'
+export TELEGRAM_BOT_TOKEN='...'
+export TELEGRAM_CHAT_ID='...'
 docker compose up -d --build
 ```
+
+PostgreSQL readiness gates the one-shot `migrate` service. Ingestor and runner
+start only after migrations complete; migrations are versioned, transactional,
+and non-destructive. The ingestor health check is green only after connecting
+and subscribing to MQTT. The runner health check performs a database query and
+does not depend on ingestor availability.
 
 Configure a gateway/component mapping before starting the ingestor:
 
@@ -24,7 +33,14 @@ reason for rejected input. Valid observations and projection updates are
 committed atomically in PostgreSQL.
 
 A basic end-to-end smoke test can publish the captured fixture after registering
-the mapped device:
+the mapped device. Configure the device and automation with the CLI first:
+
+```sh
+DATABASE_URL="postgresql://hedgeos:$POSTGRES_PASSWORD@localhost:5432/hedgeos" \
+  pnpm cli device register --address 7c:c6:b6:7f:52:df --name "Kitchen window"
+DATABASE_URL="postgresql://hedgeos:$POSTGRES_PASSWORD@localhost:5432/hedgeos" \
+  pnpm cli automation create --name "Window opened" --previous closed --current open
+```
 
 ```sh
 payload=$(python3 -c 'import json; print(json.dumps(json.load(open("docs/fixtures/shelly-blu-gateway-notify-status.json"))["payload"]))')

@@ -10,6 +10,8 @@ export interface IngestorRuntime {
   stop(): Promise<void>;
 }
 
+const readyFile = process.env.INGESTOR_READY_FILE ?? '/tmp/hedgeos-ingestor-ready';
+
 function mappingsFromEnvironment(value = process.env.SHELLY_GATEWAY_MAPPINGS): ShellyGatewayMapping[] {
   if (!value) return [];
   const parsed: unknown = JSON.parse(value);
@@ -36,13 +38,20 @@ export function createIngestor(): IngestorRuntime {
     password: process.env.MQTT_PASSWORD,
     clientId: process.env.MQTT_CLIENT_ID ?? `hedgeos-ingestor-${randomUUID()}`,
   });
-  return { pool, transport, service, stop: async () => { await transport.stop(); await pool.end(); } };
+  return { pool, transport, service, stop: async () => {
+    await transport.stop();
+    await pool.end();
+    const { unlink } = await import('node:fs/promises');
+    await unlink(readyFile).catch(() => undefined);
+  } };
 }
 
 export async function startIngestor(): Promise<IngestorRuntime> {
   const runtime = createIngestor();
   await runMigrations(runtime.pool);
   await runtime.transport.start(message => runtime.service.ingest(message).then(() => undefined));
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(readyFile, 'ready\n');
   return runtime;
 }
 

@@ -1,15 +1,20 @@
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { AutomationRunner, RandomIdGenerator, SystemClock } from '@hedgeos/application';
-import { PostgresAutomationExecutionRepository, PostgresAutomationRepository, PostgresDeviceRepository, PostgresTransitionHandoff, runMigrations } from '@hedgeos/infrastructure';
+import { PostgresAutomationExecutionRepository, PostgresAutomationRepository, PostgresDeviceRepository, PostgresTransitionHandoff, TelegramNotificationAdapter, runMigrations } from '@hedgeos/infrastructure';
 
 export function createRunner() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   const automations = new PostgresAutomationRepository(pool);
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  const notification = token && chatId
+    ? new TelegramNotificationAdapter({ token, chatId, apiUrl: process.env.TELEGRAM_API_URL })
+    : undefined;
   const runner = new AutomationRunner(
     new PostgresTransitionHandoff(pool), automations,
     new PostgresAutomationExecutionRepository(pool), new PostgresDeviceRepository(pool),
-    new RandomIdGenerator(), new SystemClock(),
+    new RandomIdGenerator(), new SystemClock(), notification,
   );
   return { name: 'runner' as const, pool, runner };
 }
