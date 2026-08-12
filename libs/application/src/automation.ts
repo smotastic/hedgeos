@@ -81,6 +81,10 @@ export interface RunnerOptions {
   readonly leaseMs: number;
   readonly limit?: number;
   readonly mode?: ExecutionMode;
+  /** Maximum delivery attempts for one logical notification action. */
+  readonly maxNotificationAttempts?: number;
+  /** Optional random source so retry jitter can be deterministic in tests. */
+  readonly random?: () => number;
 }
 
 /** Evaluates claimed transitions. It contains no PostgreSQL or ingestor dependency. */
@@ -100,19 +104,44 @@ export class AutomationRunner {
     let acknowledged = 0;
     for (const claim of claims) {
       try {
-        await this.evaluateClaim(claim, options.mode ?? 'live');
+        await this.evaluateClaim(claim, options.mode ?? 'live', options.maxNotificationAttempts ?? 5, options.random ?? Math.random);
         await this.handoff.acknowledge(claim.claimId, options.workerId, options.now);
         acknowledged += 1;
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
-        const backoff = Math.min(60_000, 1_000 * 2 ** Math.min(claim.attempt, 6));
-        await this.handoff.retry(claim.claimId, options.workerId, options.now, new Date(options.now.getTime() + backoff), reason);
+        const base = Math.min(60_000, 1_000 * 2 ** Math.min(claim.attempt - 1, 6));
+        const jitter = Math.floor(base * 0.25 * (options.random ?? Math.random)());
+        await this.handoff.retry(claim.claimId, options.workerId, options.now, new Date(options.now.getTime() + base + jitter), reason);
       }
     }
     return { claimed: claims.length, acknowledged };
   }
 
-  async evaluateClaim(claim: TransitionClaim, mode: ExecutionMode = 'live'): Promise<number> {
+  /** Manually retries an exhausted action without creating another execution. */
+  async retryNotification(actionId: string, transition: TransitionClaim['transition'], maxAttempts = 5): Promise<void> {
+    const action = await this.executions.findAction(actionId);
+    if (!action) throw new Error(`Notification action not found: ${actionId}`);
+    if (action.status === 'delivered') return;
+    const attempts = await this.executions.listAttempts(actionId);
+    const attemptNumber = Math.max(0, ...attempts.map(item => item.attemptNumber)) + 1;
+    if (attemptNumber > maxAttempts) throw new Error('Notification retry limit exhausted');
+    const now = this.clock?.now() ?? new Date();
+    const attempt: NotificationAttempt = { id: this.ids?.next() ?? `${actionId}:${attemptNumber}`, actionId, attemptNumber, status: 'sending', createdAt: now };
+    await this.executions.createAttempt(attempt);
+    try {
+      if (!this.notification) throw new Error('Notification adapter is not configured');
+      await this.notification.send(action, transition, { deviceName: transition.deviceAddress });
+      await this.executions.updateAttempt(attempt.id, 'delivered', this.clock?.now() ?? now);
+      await this.executions.updateAction(actionId, 'delivered', this.clock?.now() ?? now);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      const retryable = !(error && typeof error === 'object' && 'retryable' in error && (error as { retryable: unknown }).retryable === false);
+      await this.executions.updateAttempt(attempt.id, retryable && attemptNumber < maxAttempts ? 'retryable' : 'permanent', this.clock?.now() ?? now, reason);
+      throw error;
+    }
+  }
+
+  async evaluateClaim(claim: TransitionClaim, mode: ExecutionMode = 'live', maxNotificationAttempts = 5, random = Math.random): Promise<number> {
     const device = this.devices ? await this.devices.findByAddress(claim.transition.deviceAddress) : null;
     if (device && device.status !== 'enabled') return 0;
     const active = await this.automations.listEnabledWithCurrentRevisions();
@@ -141,15 +170,21 @@ export class AutomationRunner {
       const attempt: NotificationAttempt = { id: this.ids?.next() ?? `${actionResult.action.id}:${attemptNumber}`, actionId: actionResult.action.id, attemptNumber, status: 'sending', createdAt: now };
       await this.executions.createAttempt(attempt);
       try {
-        await this.notification.send(actionResult.action, claim.transition);
+        await this.notification.send(actionResult.action, claim.transition, {
+          deviceName: device?.displayName ?? claim.transition.deviceAddress,
+        });
         await this.executions.updateAttempt(attempt.id, 'delivered', this.clock?.now() ?? now);
         await this.executions.updateAction(actionResult.action.id, 'delivered', this.clock?.now() ?? now);
         await this.executions.updateExecution(effectiveExecution.id, 'recorded', this.clock?.now() ?? now);
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
-        await this.executions.updateAttempt(attempt.id, 'retryable', this.clock?.now() ?? now, reason);
+        const retryable = !(error && typeof error === 'object' && 'retryable' in error && (error as { retryable: unknown }).retryable === false);
+        const exhausted = attemptNumber >= Math.max(1, maxNotificationAttempts);
+        const permanent = !retryable || exhausted;
+        await this.executions.updateAttempt(attempt.id, permanent ? 'permanent' : 'retryable', this.clock?.now() ?? now, reason);
         await this.executions.updateAction(actionResult.action.id, 'failed', this.clock?.now() ?? now, reason);
         await this.executions.updateExecution(effectiveExecution.id, 'failed', this.clock?.now() ?? now, reason);
+        if (permanent) continue;
         throw error;
       }
     }
